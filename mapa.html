@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mapa con Filtro de Vehículos</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        .custom-label {
+            background-color: white;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: black;
+            font-weight: bold;
+        }
+        #filters {
+            margin: 10px;
+            padding: 10px;
+            background-color: #f0f0f0;
+        }
+        #filter-dropdown {
+            width: 200px;
+            height: 150px;
+            overflow-y: auto;
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 5px;
+        }
+        #filter-dropdown label {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map" style="width: 100%; height: 600px;"></div>
+    <div id="filters">
+        <h3>Filtrar Vehículos por ID:</h3>
+        <div id="filter-dropdown">
+            <!-- Las opciones de filtro se agregarán aquí dinámicamente -->
+        </div>
+        <button onclick="aplicarFiltro()">Aplicar Filtro</button>
+    </div>
+
+    <script>
+        var map = L.map('map').setView([25.64, -100.31], 12);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+        }).addTo(map);
+
+        var markers = []; // Array para almacenar los marcadores
+        var vehiculos = []; // Array para almacenar los datos de vehículos
+
+        function obtenerDatos() {
+            fetch('http://localhost:5000/vehiculos')
+                .then(response => response.json())
+                .then(data => {
+                    vehiculos = data;
+                    actualizarFiltro(); // Actualiza el filtro después de obtener datos
+                    aplicarFiltro(); // Aplica el filtro con los datos actuales
+                })
+                .catch(error => console.error('Error al obtener los datos:', error));
+        }
+
+        function actualizarFiltro() {
+            var filtroDropdown = document.getElementById('filter-dropdown');
+            filtroDropdown.innerHTML = ''; // Limpia las opciones de filtro
+
+            if (vehiculos.length > 0) {
+                var ids = [...new Set(vehiculos.map(v => v.id))]; // Obtiene IDs únicos
+                ids.forEach(id => {
+                    var checkboxContainer = document.createElement('label');
+                    
+                    var checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = id;
+                    checkbox.value = id;
+
+                    var label = document.createElement('span');
+                    label.innerText = id;
+
+                    checkboxContainer.appendChild(checkbox);
+                    checkboxContainer.appendChild(label);
+                    filtroDropdown.appendChild(checkboxContainer);
+
+                    // Restaurar estado de las casillas
+                    if (localStorage.getItem(id) === 'true') {
+                        checkbox.checked = true;
+                    }
+
+                    // Añadir evento para mantener el estado
+                    checkbox.addEventListener('change', () => {
+                        localStorage.setItem(checkbox.id, checkbox.checked);
+                        aplicarFiltro(); // Aplicar filtro al cambiar el estado
+                    });
+                });
+            } else {
+                filtroDropdown.innerHTML = '<p>No hay datos disponibles para mostrar.</p>';
+            }
+        }
+
+        function aplicarFiltro() {
+            var selectedIds = Array.from(document.querySelectorAll('#filter-dropdown input:checked'))
+                                    .map(checkbox => checkbox.value);
+
+            // Guardar el estado de las casillas en localStorage
+            document.querySelectorAll('#filter-dropdown input').forEach(checkbox => {
+                localStorage.setItem(checkbox.id, checkbox.checked);
+            });
+
+            // Limpiar los marcadores anteriores
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+
+            // Añadir nuevos marcadores basados en el filtro
+            vehiculos.forEach(function(vehiculo) {
+                if (selectedIds.includes(vehiculo.id)) {
+                    var marker = L.marker([vehiculo.lat, vehiculo.lon])
+                      .bindPopup('<b>Vehículo ID:</b> ' + vehiculo.id + '<br><b>Hora:</b> ' + vehiculo.tiempo);
+
+                    marker.bindTooltip('<div class="custom-label">' + vehiculo.id + '</div>', { permanent: true, direction: 'top' });
+
+                    marker.addTo(map);
+                    markers.push(marker);
+                }
+            });
+        }
+
+        // Actualiza el mapa cada segundo
+        setInterval(obtenerDatos, 500);
+    </script>
+</body>
+</html>
